@@ -401,3 +401,34 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./.env:/app/.env
+
+  ######### xCRG
+  xcrg:
+    container_name: xcrg
+    build:
+      context: .
+      dockerfile: workers/xcrg/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      shepherd_db:
+        condition: service_healthy
+      shepherd_broker:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - ./.env:/app/.env
+
+  xcrg_lookup:
+    container_name: xcrg_lookup
+    build:
+      context: .
+      dockerfile: workers/xcrg_lookup/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      shepherd_db:
+        condition: service_healthy
+      shepherd_broker:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+      - ./.env:/app/.env

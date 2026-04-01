@@ -38,6 +38,7 @@ class ARATargetEnum(str, Enum):
     BTE = "bte"
     EXAMPLE = "example"
     SIPR = "sipr"
+    XCRG = "xcrg"
 
 
 default_input_query: dict = {
@@ -96,6 +97,7 @@ async def run_query(
             "arax.pathfinder",
             "arax.rank",
             "bte.lookup",
+            "xcrg.lookup",
             "sort_results_score",
             "filter_results_top_n",
             "filter_kgraph_orphans",
