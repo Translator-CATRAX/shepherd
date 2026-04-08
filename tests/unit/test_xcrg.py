@@ -47,17 +47,20 @@ async def test_xcrg_lookup_dispatches_callback(mocker, redis_mock):
                         }
                     },
                 }
-            }
+            },
+            "parameters": {},
         },
     )
-    mocker.patch("workers.xcrg_lookup.worker.add_callback_id")
-    mock_running_callbacks = mocker.patch(
-        "workers.xcrg_lookup.worker.get_running_callbacks"
-    )
-    mock_running_callbacks.return_value = []
     mock_response = mocker.Mock()
     mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {
+        "message": {
+            "knowledge_graph": {"nodes": {}, "edges": {}},
+            "results": [],
+        }
+    }
     mock_post = mocker.patch("httpx.AsyncClient.post", return_value=mock_response)
+    mock_save = mocker.patch("workers.xcrg_lookup.worker.save_message")
     logger = logging.getLogger(__name__)
 
     await xcrg_lookup(
@@ -75,3 +78,4 @@ async def test_xcrg_lookup_dispatches_callback(mocker, redis_mock):
     )
 
     assert mock_post.called
+    assert mock_save.called

@@ -9,10 +9,8 @@ import httpx
 
 from shepherd_utils.config import settings
 from shepherd_utils.db import (
-    add_callback_id,
-    cleanup_callbacks,
     get_message,
-    get_running_callbacks,
+    save_message,
 )
 from shepherd_utils.otel import setup_tracer
 from shepherd_utils.shared import get_tasks, handle_task_failure, wrap_up_task
@@ -37,6 +35,10 @@ def validate_lookup_query(message: dict) -> None:
     if edge.get("knowledge_type", "lookup") == "inferred":
         raise ValueError("xCRG lookup MVP does not support inferred edges.")
 
+    predicates = edge.get("predicates") or []
+    if "biolink:affects" not in predicates:
+        raise ValueError("xCRG lookup MVP requires predicate biolink:affects.")
+
     subject = edge.get("subject")
     obj = edge.get("object")
     if subject not in qnodes or obj not in qnodes:
@@ -46,48 +48,58 @@ def validate_lookup_query(message: dict) -> None:
     if len(pinned_nodes) != 1:
         raise ValueError("xCRG lookup MVP supports exactly one pinned query node.")
 
+    unbound_nodes = [qid for qid, qnode in qnodes.items() if not qnode.get("ids")]
+    if len(unbound_nodes) != 1:
+        raise ValueError("xCRG lookup MVP supports exactly one unbound query node.")
+
+    pinned_node = qnodes[pinned_nodes[0]]
+    unbound_node = qnodes[unbound_nodes[0]]
+
+    pinned_categories = pinned_node.get("categories") or []
+    if "biolink:Gene" not in pinned_categories:
+        raise ValueError("xCRG lookup MVP requires the pinned node to be a Gene.")
+
+    unbound_categories = unbound_node.get("categories") or []
+    if "biolink:ChemicalEntity" not in unbound_categories:
+        raise ValueError(
+            "xCRG lookup MVP requires the unbound node to be a ChemicalEntity."
+        )
+
 
 async def xcrg_lookup(task, logger: logging.Logger):
-    """Dispatch a direct lookup query to the configured graph backend."""
+    """Dispatch a direct lookup query to Retriever and save the sync response."""
     query_id = task[1]["query_id"]
+    response_id = task[1]["response_id"]
     message = await get_message(query_id, logger)
     parameters = message.get("parameters") or {}
     parameters["timeout"] = parameters.get("timeout", settings.lookup_timeout)
+    parameters["tiers"] = parameters.get("tiers") or [settings.default_data_tier]
     message["parameters"] = parameters
 
     validate_lookup_query(message)
 
-    callback_id = str(uuid.uuid4())[:8]
-    await add_callback_id(query_id, callback_id, logger)
-    message["callback"] = f"{settings.callback_host}/xcrg/callback/{callback_id}"
-
-    logger.info(f"Sending xCRG lookup query to {settings.xcrg_lookup_url}")
-    async with httpx.AsyncClient(timeout=100) as client:
-        response = await client.post(settings.xcrg_lookup_url, json=message)
-        response.raise_for_status()
-
-    max_query_time = message["parameters"]["timeout"]
-    start_time = time.time()
-    running_callback_ids = [callback_id]
-    while time.time() - start_time < max_query_time:
-        try:
-            running_callback_ids = await get_running_callbacks(query_id, logger)
-        except Exception:
-            await asyncio.sleep(5)
-            continue
-
-        if len(running_callback_ids) == 0:
-            logger.debug("xCRG lookup callbacks completed.")
-            break
-
-        await asyncio.sleep(1)
-
-    if time.time() - start_time > max_query_time:
-        logger.warning(
-            "Timed out getting xCRG lookup callbacks. "
-            f"{len(running_callback_ids)} queries were still running..."
+    if "submitter" not in message:
+        message["submitter"] = (
+            "infores:shepherd-xcrg:{maturity}@{location}@{url}".format(
+                maturity=settings.server_maturity,
+                location=settings.server_location,
+                url=settings.server_url,
+            )
         )
-        await cleanup_callbacks(query_id, logger)
+
+    logger.info(f"Sending xCRG lookup query to {settings.sync_kg_retrieval_url}")
+    async with httpx.AsyncClient(timeout=message["parameters"]["timeout"]) as client:
+        response = await client.post(settings.sync_kg_retrieval_url, json=message)
+        response.raise_for_status()
+        result = response.json()
+
+    if "message" not in result:
+        raise ValueError("Retriever response did not contain a TRAPI message.")
+    result["message"].setdefault("knowledge_graph", {"nodes": {}, "edges": {}})
+    result["message"].setdefault("results", [])
+    result["message"].setdefault("auxiliary_graphs", {})
+
+    await save_message(response_id, result, logger)
 
 
 async def process_task(task, parent_ctx, logger: logging.Logger, limiter):

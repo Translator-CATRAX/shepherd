@@ -1,4 +1,4 @@
-"""xCRG ARA entry worker."""
+"""xCRG ARA entry worker"""
 
 import asyncio
 import json
