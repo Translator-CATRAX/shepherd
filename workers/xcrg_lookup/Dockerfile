@@ -20,5 +20,6 @@ RUN pip install -r requirements.txt
 USER nru
 
 COPY ./workers/xcrg_lookup .
+COPY ./scripts/transcription_factors.json ./transcription_factors.json
 
 CMD ["python", "worker.py"]

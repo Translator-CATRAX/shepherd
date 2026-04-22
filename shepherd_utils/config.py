@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     redis_password: str = "supersecretpassword"
 
     lookup_timeout: int = 210
+    xcrg_tf_batch_size: int = 200
     callback_host: str = "http://127.0.0.1:5439"
     kg_retrieval_url: str = "https://strider.renci.org/asyncquery"
     sync_kg_retrieval_url: str = "https://strider.renci.org/query"
