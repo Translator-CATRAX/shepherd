@@ -5,6 +5,7 @@ FROM ghcr.io/translatorsri/renci-python-image:3.11.5
 LABEL org.opencontainers.image.source https://github.com/Translator-CATRAX/shepherd
 
 ENV PYTHONHASHSEED=0
+ENV PYSTOW_HOME=/app/.data
 
 WORKDIR /app
 

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
 
     lookup_timeout: int = 210
     xcrg_tf_batch_size: int = 200
+    xcrg_ngd_db_path: str = "curie_ngd_v1.0_tier0-20260408.sqlite"
+    trapi_schema_version: str = "1.6.0"
+    biolink_version: str = "4.3.2"
     callback_host: str = "http://127.0.0.1:5439"
     kg_retrieval_url: str = "https://strider.renci.org/asyncquery"
     sync_kg_retrieval_url: str = "https://strider.renci.org/query"
